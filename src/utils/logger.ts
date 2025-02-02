@@ -27,8 +27,8 @@ export const logger = {
       baseLogger.info(`${label}: ${duration.toFixed(2)}ms`);
     }
   },
-  info: (...args: any[]) => baseLogger.info(...args),
-  error: (...args: any[]) => baseLogger.error(...args),
-  debug: (...args: any[]) => baseLogger.debug(...args),
-  warn: (...args: any[]) => baseLogger.warn(...args)
-}; 
+  info: (...args: Parameters<typeof baseLogger.info>) => baseLogger.info(...args),
+  error: (...args: Parameters<typeof baseLogger.error>) => baseLogger.error(...args),
+  debug: (...args: Parameters<typeof baseLogger.debug>) => baseLogger.debug(...args),
+  warn: (...args: Parameters<typeof baseLogger.warn>) => baseLogger.warn(...args)
+};    
