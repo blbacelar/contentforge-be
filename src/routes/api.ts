@@ -26,6 +26,7 @@ export function createApiRouter() {
 
   // Text routes
   router.post('/text/captions', TextController.generateTextCaptions);
+  router.post('/text/script', TextController.generateTextScript);
 
   // Upload routes
   router.post('/upload', upload.single('file'), UploadController.handleUpload);
