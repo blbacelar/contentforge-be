@@ -20,6 +20,12 @@ export function initializeApp() {
   app.use(cors({
     origin: process.env.NODE_ENV === 'development' ? '*' : process.env.CORS_ORIGIN
   }));
+
+  app.use(cors({
+    origin: ['http://localhost:3000', 'https://contentforge-be.onrender.com'],
+    credentials: true
+  }));
+  
   app.use(express.json({ limit: '10mb' }));
 
   // Rate limiting
