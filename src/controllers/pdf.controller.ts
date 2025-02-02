@@ -5,11 +5,15 @@ import { z } from 'zod';
 import { AIService } from '../services/ai.service';
 import { ScriptStructure } from '../types/script';
 import { logger } from '../utils/logger';
+import { TONES } from '../config/tones';
 
 export const pdfSchema = z.object({
   pdfUrl: z.string().url(),
-  language: z.enum(['en-US', 'es-ES', 'pt-BR']).optional()
+  language: z.enum(['en-US', 'es-ES', 'pt-BR']).optional().default('en-US'),
+  tone: z.enum(['casual', 'formal', 'humorous', 'inspirational', 'professional']).optional().default('casual'),
+  niche: z.string().min(3).max(50).optional().default('general')
 });
+
 
 export const cloudinaryPdfSchema = z.object({
   publicId: z.string()
@@ -18,18 +22,28 @@ export const cloudinaryPdfSchema = z.object({
 export const pdfCaptionsSchema = z.object({
   pdfUrl: z.string().url(),
   language: z.enum(['en-US', 'es-ES', 'pt-BR']),
-  count: z.number().int().min(1).max(5).optional().default(1)
+  count: z.number().int().min(1).max(5).optional().default(1),
+  tone: z.enum(['casual', 'formal', 'humorous', 'inspirational', 'professional']).optional().default('casual'),
+  niche: z.string().min(3).max(50).optional().default('general')
 });
+
 
 export const cloudinaryCaptionsSchema = z.object({
   publicId: z.string(),
-  language: z.enum(['en-US', 'es-ES', 'pt-BR'])
+  language: z.enum(['en-US', 'es-ES', 'pt-BR']),
+  count: z.number().int().min(1).max(5).optional().default(1),
+  tone: z.enum(['casual', 'formal', 'humorous', 'inspirational', 'professional']).optional().default('casual'),
+  niche: z.string().min(3).max(50).optional().default('general')
 });
+
 
 export const pdfScriptSchema = z.object({
   pdfUrl: z.string().url(),
-  language: z.enum(['en-US', 'es-ES', 'pt-BR'])
+  language: z.enum(['en-US', 'es-ES', 'pt-BR']),
+  tone: z.enum(TONES).optional().default('Casual'),
+  niche: z.string().min(3).max(50).optional().default('general')
 });
+
 
 export class PdfController {
   private static pdfService = new PdfService();
@@ -145,6 +159,7 @@ export class PdfController {
 
       const buffer = await PdfController.fetchPdfBuffer(validation.data.pdfUrl);
       const fullText = await PdfController.pdfService.extractFullText(buffer);
+      const { language, tone, niche } = validation.data;
       
       if (fullText.length < 250) {
         throw new HTTPError('PDF content is too short for meaningful script generation', 400);
@@ -153,8 +168,13 @@ export class PdfController {
       const script = await PdfController.aiService.generateContent(
         'script',
         fullText,
-        validation.data.language
+        language,
+        1,
+        tone,
+        niche
+
       ) as ScriptStructure;
+
 
       if (!script?.scenes?.length) {
         throw new HTTPError('Generated script has invalid structure', 500);
@@ -178,6 +198,7 @@ export class PdfController {
         logger.warn('Invalid request parameters');
         throw new HTTPError('Invalid request parameters', 400);
       }
+      const { language, count, tone, niche } = validation.data;
 
       logger.info('Fetching PDF buffer');
       const buffer = await PdfController.fetchPdfBuffer(validation.data.pdfUrl);
@@ -194,8 +215,11 @@ export class PdfController {
       const captions = await PdfController.aiService.generateContent(
         'captions',
         fullText,
-        validation.data.language,
-        validation.data.count
+        language,
+        count,
+        tone,
+        niche
+
       ) as string[];
 
       logger.info(`Generated ${captions.length} captions`);
@@ -218,6 +242,7 @@ export class PdfController {
         throw new HTTPError('Invalid request parameters', 400);
       }
 
+      const { language, tone, niche } = validation.data;
       logger.info('Fetching PDF buffer');
       const buffer = await PdfController.fetchPdfBuffer(validation.data.pdfUrl);
       
@@ -233,8 +258,13 @@ export class PdfController {
       const script = await PdfController.aiService.generateContent(
         'script',
         fullText,
-        validation.data.language
+        language,
+        1,
+        tone,
+        niche
+
       ) as ScriptStructure;
+
 
       if (!script?.scenes?.length) {
         logger.error('Generated script has invalid structure');

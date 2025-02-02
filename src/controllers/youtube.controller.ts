@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { AIService } from '../services/ai.service';
 import { ScriptStructure } from '../types/script';
 import { logger } from '../utils/logger';
+import { TONES } from '../config/tones';
 
 export const transcriptSchema = z.object({
   url: z.string().url()
@@ -13,12 +14,16 @@ export const transcriptSchema = z.object({
 export const youtubeCaptionsSchema = z.object({
   url: z.string().url(),
   language: z.enum(['en-US', 'es-ES', 'pt-BR']),
-  count: z.number().int().min(1).max(5).optional().default(1)
+  count: z.number().int().min(1).max(5).optional().default(1),
+  tone: z.enum(TONES).optional().default('Casual'),
+  niche: z.string().min(3).max(50).optional().default('general')
 });
 
 export const youtubeScriptSchema = z.object({
   url: z.string().url(),
-  language: z.enum(['en-US', 'es-ES', 'pt-BR']).optional()
+  language: z.enum(['en-US', 'es-ES', 'pt-BR']).optional().default('en-US'),
+  tone: z.enum(TONES).optional().default('Casual'),
+  niche: z.string().min(3).max(50).optional().default('general')
 });
 
 export class YoutubeController {
@@ -61,6 +66,7 @@ export class YoutubeController {
         logger.warn('❌ Invalid request parameters');
         throw new HTTPError('Invalid YouTube URL or language', 400);
       }
+      const { language, count, tone, niche } = validation.data;
 
       logger.info(`🔗 Processing video URL: ${validation.data.url}`);
       const videoId = YoutubeController.extractVideoId(validation.data.url);
@@ -75,9 +81,12 @@ export class YoutubeController {
       logger.info('🤖 Generating captions with AI');
       const captions = await YoutubeController.aiService.generateContent(
         'captions',
-        transcript,
-        validation.data.language,
-        validation.data.count
+        transcript, 
+        language,
+        count,
+        tone,
+        niche
+
       ) as string[];
 
       logger.info(`✨ Generated ${captions.length} captions`);
@@ -99,7 +108,7 @@ export class YoutubeController {
         logger.warn('❌ Invalid request parameters');
         throw new HTTPError('Invalid YouTube URL or language', 400);
       }
-
+      const { language, tone, niche } = validation.data;
       logger.info(`🔗 Processing video URL: ${validation.data.url}`);
       const videoId = YoutubeController.extractVideoId(validation.data.url);
       logger.info(`📹 Fetching transcript for video ID: ${videoId}`);
@@ -114,8 +123,11 @@ export class YoutubeController {
       const script = await YoutubeController.aiService.generateContent(
         'script',
         transcript,
-        validation.data.language,
-        1
+        language,
+        1,
+        tone,
+        niche
+
       ) as ScriptStructure;
 
       logger.info(`✨ Generated script with ${script.scenes?.length || 0} scenes`);

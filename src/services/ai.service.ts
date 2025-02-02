@@ -10,14 +10,17 @@ export class AIService {
     type: PromptType,
     content: string,
     language: LANGUAGE_CODES = 'en-US',
-    count: number = 1
+    count: number = 1,
+    tone: string = 'casual',
+    niche: string = 'general'
+
   ): Promise<string[] | ScriptStructure> {
     const finalCount = type === 'script' ? 1 : count;
     if (!content || content.length < 50) {
       throw new HTTPError('Insufficient content for generation', 400);
     }
     try {
-      const { systemPrompt, userPrompt } = this.getPrompts(type, content, language, finalCount);
+      const { systemPrompt, userPrompt } = this.getPrompts(type, content, language, finalCount, tone, niche);
       const response = await fetch(this.DEEPSEEK_API_URL, {
         method: 'POST',
         headers: {
@@ -66,24 +69,24 @@ export class AIService {
     }
   }
 
-  private getPrompts(type: PromptType, content: string, language: LANGUAGE_CODES, count: number) {
+  private getPrompts(type: PromptType, content: string, language: LANGUAGE_CODES, count: number, tone: string, niche: string) {
     if (type === 'captions') {
       return {
-        systemPrompt: prompts[type].system(LANGUAGES[language].systemPrompt, count),
-        userPrompt: prompts[type].user(content, count)
+        systemPrompt: prompts[type].system(LANGUAGES[language].systemPrompt, count, tone, niche),
+        userPrompt: prompts[type].user(content, count, tone, niche)
       };
     }
     
     if (type === 'script') {
       return {
-        systemPrompt: prompts[type].system(LANGUAGES[language].systemPrompt),
-        userPrompt: prompts[type].user(content)
+        systemPrompt: prompts[type].system(LANGUAGES[language].systemPrompt, tone, niche),
+        userPrompt: prompts[type].user(content, tone, niche)
       };
     }
 
     return {
-      systemPrompt: prompts[type].system(LANGUAGES[language].systemPrompt),
-      userPrompt: prompts[type].user(content)
+      systemPrompt: prompts[type].system(LANGUAGES[language].systemPrompt, tone, niche),
+      userPrompt: prompts[type].user(content, tone, niche)
     };
   }
 } 
