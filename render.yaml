@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: contentforge-be
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    nodeVersion: 18.x
