@@ -9,6 +9,9 @@ import { requestLogger } from './middleware/requestLogger';
 export function initializeApp() {
   const app = express();
   
+  // Trust the first proxy (e.g., Render's proxy)
+  app.set('trust proxy', 1);
+  
   // Add request logging before other middleware
   app.use(requestLogger);
   
