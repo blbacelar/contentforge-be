@@ -1,4 +1,4 @@
-/// <reference types="node" />
+    /// <reference types="node" />
 import pino from 'pino';
 
 const timers = new Map<string, number>();
@@ -12,7 +12,7 @@ const baseLogger = pino({
       ignore: 'pid,hostname'
     }
   },
-  level: process.env.NODE_ENV === 'development' ? 'debug' : 'info'
+    level: process.env.NODE_ENV === 'development' ? 'debug' : 'info'
 });
 
 export const logger = {
