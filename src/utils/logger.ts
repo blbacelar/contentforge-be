@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import pino from 'pino';
 
 const timers = new Map<string, number>();
