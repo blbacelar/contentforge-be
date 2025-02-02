@@ -3,5 +3,5 @@ services:
     name: contentforge-be
     env: node
     buildCommand: npm install && npm run build
-    startCommand: npm start
+    startCommand: node ./dist/index.js  # Make path explicit
     nodeVersion: 18.x
