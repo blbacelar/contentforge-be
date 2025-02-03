@@ -39,11 +39,25 @@ export function initializeApp() {
 
   // Health check
   app.get('/health', (req, res) => {
-    res.status(200).json({ 
+    const healthcheck = {
       status: 'ok',
+      timestamp: new Date().toISOString(),
       environment: process.env.NODE_ENV,
-      timestamp: new Date().toISOString()
-    });
+      uptime: process.uptime(),
+      memoryUsage: process.memoryUsage(),
+      version: process.env.npm_package_version || '1.0.0',
+      services: {
+        deepseek: process.env.DEEPSEEK_API_KEY ? 'configured' : 'not configured',
+        cloudinary: process.env.CLOUDINARY_API_KEY ? 'configured' : 'not configured'
+      }
+    };
+
+    try {
+      res.status(200).json(healthcheck);
+    } catch (error) {
+      healthcheck.status = 'error';
+      res.status(503).json(healthcheck);
+    }
   });
 
   // Error handling

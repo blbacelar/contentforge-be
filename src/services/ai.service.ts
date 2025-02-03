@@ -2,6 +2,7 @@ import { HTTPError } from '../utils/errors';
 import { prompts, PromptType } from '../config/prompts';
 import { LANGUAGE_CODES, LANGUAGES } from '../types/language';
 import { ScriptStructure } from '../types/script';
+import { logger } from '../utils/logger';
 
 export class AIService {
   private readonly DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
@@ -11,7 +12,7 @@ export class AIService {
     content: string,
     language: LANGUAGE_CODES = 'en-US',
     count: number = 1,
-    tone: string = 'casual',
+    tone: string = 'Casual',
     niche: string = 'general'
 
   ): Promise<string[] | ScriptStructure> {
@@ -21,6 +22,8 @@ export class AIService {
     }
     try {
       const { systemPrompt, userPrompt } = this.getPrompts(type, content, language, finalCount, tone, niche);
+      logger.info(`Generating ${type} with prompt:`, { systemPrompt, userPrompt });
+
       const response = await fetch(this.DEEPSEEK_API_URL, {
         method: 'POST',
         headers: {
@@ -37,10 +40,15 @@ export class AIService {
         })
       });
 
-      if (!response.ok) throw new Error(`API error: ${response.statusText}`);
+      if (!response.ok) {
+        const errorData = await response.text();
+        logger.error('API Response Error:', { status: response.status, data: errorData });
+        throw new Error(`API error: ${response.statusText} - ${errorData}`);
+      }
       
       const data = await response.json();
       const responseText = data.choices[0]?.message?.content?.trim() || '';
+      logger.info('AI Response:', { responseText });
 
       if (type === 'script') {
         let cleanedJson = responseText;
@@ -55,17 +63,38 @@ export class AIService {
         }
       }
 
+      // Caption processing
+      logger.info('Processing captions from response');
       const rawCaptions = responseText.split('\n')
-        .map((c: string) => 
-          c.replace(/^["\d.]+[\s)]*/, '')
-           .replace(/\s{2,}/g, ' ')
-           .trim()
-        )
-        .filter((c: string) => c.length > 0 && !c.startsWith('Caption'));
+        .map((c: string) => {
+          const processed = c.replace(/^["\d.]+[\s)]*/, '')
+            .replace(/\s{2,}/g, ' ')
+            .trim();
+          logger.debug('Processed caption:', { original: c, processed });
+          return processed;
+        })
+        .filter((c: string) => {
+          const isValid = c.length > 0 && !c.startsWith('Caption');
+          if (!isValid) {
+            logger.debug('Filtered out caption:', { caption: c });
+          }
+          return isValid;
+        });
       
-      return rawCaptions.slice(0, finalCount);
+      const finalCaptions = rawCaptions.slice(0, finalCount);
+      logger.info(`Generated ${finalCaptions.length} captions`);
+      
+      if (finalCaptions.length === 0) {
+        throw new Error('No valid captions were generated from the response');
+      }
+
+      return finalCaptions;
     } catch (error) {
-      throw new HTTPError('AI generation failed', 500);
+      logger.error('AI generation error:', error);
+      if (error instanceof Error) {
+        throw new HTTPError(`AI generation failed: ${error.message}`, 500);
+      }
+      throw new HTTPError('AI generation failed due to an unexpected error', 500);
     }
   }
 

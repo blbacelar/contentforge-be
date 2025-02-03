@@ -4,6 +4,7 @@ import { HTTPError } from '../utils/errors';
 import { AIService } from '../services/ai.service';
 import { ScriptStructure } from '../types/script';
 import { TONES } from '../config/tones';
+import { logger } from '../utils/logger';
 
 export const textCaptionsSchema = z.object({
   text: z.string().min(100).max(5000),
@@ -27,22 +28,34 @@ export class TextController {
     try {
       const validation = textCaptionsSchema.safeParse(req.body);
       if (!validation.success) {
-        throw new HTTPError('Invalid text input', 400);
+        throw new HTTPError(
+          'Text must be between 100 and 5000 characters for caption generation',
+          400
+        );
       }
 
-      const captions = await TextController.aiService.generateContent(
-        'captions',
-        validation.data.text,
-        validation.data.language,
-        validation.data.count,
-        validation.data.tone,
-        validation.data.niche
-      ) as string[];
+      try {
+        const captions = await TextController.aiService.generateContent(
+          'captions',
+          validation.data.text,
+          validation.data.language,
+          validation.data.count,
+          validation.data.tone,
+          validation.data.niche
+        ) as string[];
 
-      res.json({
-        success: true,
-        captions: captions.map((content: string, id: number) => ({ id, content, type: 'text' }))
-      });
+        res.json({
+          success: true,
+          captions: captions.map((content: string, id: number) => ({ id, content, type: 'text' }))
+        });
+      } catch (aiError) {
+        // Log the actual error for debugging
+        logger.error('AI Service Error:', aiError);
+        throw new HTTPError(
+          'Failed to generate captions. Please try again or contact support if the issue persists.',
+          500
+        );
+      }
     } catch (error) {
       next(error);
     }
