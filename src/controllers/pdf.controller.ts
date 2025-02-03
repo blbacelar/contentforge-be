@@ -6,6 +6,8 @@ import { AIService } from '../services/ai.service';
 import { ScriptStructure } from '../types/script';
 import { logger } from '../utils/logger';
 import { TONES } from '../config/tones';
+import { CaptionGenerationService } from '../services/caption-generation.service';
+import { ScriptGenerationService } from '../services/script-generation.service';
 
 export const pdfSchema = z.object({
   pdfUrl: z.string().url(),
@@ -45,56 +47,35 @@ export const pdfScriptSchema = z.object({
 });
 
 
+export const pdfCombinedSchema = z.object({
+  pdfUrl: z.string().url(),
+  language: z.enum(['en-US', 'es-ES', 'pt-BR']),
+  count: z.number().int().min(1).max(5).optional().default(1),
+  tone: z.enum(['casual', 'formal', 'humorous', 'inspirational', 'professional']).optional().default('casual'),
+  niche: z.string().min(3).max(50).optional().default('general')
+});
+
 export class PdfController {
-  private static pdfService = new PdfService();
-  private static aiService = new AIService();
+  private static captionService = new CaptionGenerationService();
+  private static scriptService = new ScriptGenerationService();
+  private static pdfService: PdfService;
+
 
   static async processPdf(req: Request, res: Response, next: NextFunction) {
     try {
-      logger.info('🔍 Validating request body');
-      const validation = pdfSchema.safeParse(req.body);
+      logger.info('🔄 Starting PDF processing...');
+      const validation = pdfCaptionsSchema.safeParse(req.body);
       if (!validation.success) {
-        logger.warn('❌ Invalid PDF URL provided');
+        logger.warn('❌ Invalid request parameters');
         throw new HTTPError('Invalid PDF URL', 400);
       }
 
-      logger.info(`🌐 Starting PDF fetch from: ${validation.data.pdfUrl}`);
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => {
-        controller.abort();
-        logger.warn('⏱️ PDF fetch timeout');
-      }, 30000);
+      const buffer = await PdfController.fetchPdfBuffer(validation.data.pdfUrl);
+      const fullText = await PdfController.pdfService.extractFullText(buffer);
       
-      const response = await fetch(validation.data.pdfUrl, { 
-        signal: controller.signal,
-        headers: { 'User-Agent': 'ContentForge/1.0' }
-      });
-      clearTimeout(timeoutId);
-      logger.info(`📥 PDF fetch completed with status: ${response.status}`);
-
-      if (!response.ok) {
-        logger.error(`❌ PDF fetch failed - Status: ${response.status}`);
-        throw new HTTPError(`Failed to fetch PDF (Status ${response.status})`, 400);
-      }
-
-      const contentType = response.headers.get('content-type');
-      logger.info(`🏷️ Content-Type: ${contentType}`);
-
-      if (!contentType?.includes('application/pdf')) {
-        logger.warn('❌ Invalid content type');
-        throw new HTTPError('URL does not point to a PDF file', 400);
-      }
-
-      logger.info('📦 Creating buffer from response');
-      const buffer = Buffer.from(await response.arrayBuffer());
-      logger.info(`📊 Buffer size: ${buffer.length} bytes`);
-
-      logger.info('🔄 Starting PDF processing');
-      const processedContent = await PdfController.pdfService.processPdf(buffer);
-      logger.info(`✅ PDF processing completed with ${processedContent.length} items`);
-
       res.json({
-        content: processedContent.map((text: string, id: number) => ({ id, content: text, type: 'text' }))
+        success: true,
+        text: fullText
       });
     } catch (error) {
       logger.error('❌ PDF processing error:', error);
@@ -126,19 +107,25 @@ export class PdfController {
         throw new HTTPError('Invalid request parameters', 400);
       }
 
-      const buffer = await PdfController.fetchPdfBuffer(validation.data.pdfUrl);
+      const { pdfUrl, language, count, tone, niche } = validation.data;
+
+      const buffer = await PdfController.fetchPdfBuffer(pdfUrl);
       const fullText = await PdfController.pdfService.extractFullText(buffer);
       
+
       if (fullText.length < 100) {
         throw new HTTPError('PDF content is too short for caption generation', 400);
       }
 
-      const captions = await PdfController.aiService.generateContent(
-        'captions',
+      const captions = await PdfController.captionService.generateCaptions(
         fullText,
-        validation.data.language,
-        validation.data.count
-      ) as string[];
+        language,
+        count,
+        tone,
+        niche
+      );
+
+
 
       res.json({
         success: true,
@@ -165,14 +152,11 @@ export class PdfController {
         throw new HTTPError('PDF content is too short for meaningful script generation', 400);
       }
 
-      const script = await PdfController.aiService.generateContent(
-        'script',
+      const script = await PdfController.scriptService.generateScript(
         fullText,
         language,
-        1,
         tone,
         niche
-
       ) as ScriptStructure;
 
 
@@ -212,14 +196,12 @@ export class PdfController {
       }
 
       logger.info('Generating captions with AI');
-      const captions = await PdfController.aiService.generateContent(
-        'captions',
+      const captions = await PdfController.captionService.generateCaptions(
         fullText,
         language,
         count,
         tone,
         niche
-
       ) as string[];
 
       logger.info(`Generated ${captions.length} captions`);
@@ -239,39 +221,29 @@ export class PdfController {
       const validation = pdfScriptSchema.safeParse(req.body);
       if (!validation.success) {
         logger.warn('Invalid request parameters');
-        throw new HTTPError('Invalid request parameters', 400);
+        throw new HTTPError('Invalid PDF URL or language', 400);
       }
-
       const { language, tone, niche } = validation.data;
+
       logger.info('Fetching PDF buffer');
       const buffer = await PdfController.fetchPdfBuffer(validation.data.pdfUrl);
       
       logger.info('Extracting text from PDF');
       const fullText = await PdfController.pdfService.extractFullText(buffer);
       
-      if (fullText.length < 250) {
+      if (fullText.length < 100) {
         logger.warn('PDF content too short');
-        throw new HTTPError('PDF content is too short for meaningful script generation', 400);
+        throw new HTTPError('PDF content is too short for script generation', 400);
       }
 
       logger.info('Generating script with AI');
-      const script = await PdfController.aiService.generateContent(
-        'script',
+      const script = await PdfController.scriptService.generateScript(
         fullText,
         language,
-        1,
         tone,
         niche
-
       ) as ScriptStructure;
 
-
-      if (!script?.scenes?.length) {
-        logger.error('Generated script has invalid structure');
-        throw new HTTPError('Generated script has invalid structure', 500);
-      }
-
-      logger.info(`Generated script with ${script.scenes.length} scenes`);
       res.json({
         success: true,
         script
@@ -279,6 +251,44 @@ export class PdfController {
     } catch (error) {
       logger.error('PDF script generation error:', error);
       next(new HTTPError('Failed to generate script from PDF', 500));
+    }
+  }
+
+  static async generateCombinedPdf(req: Request, res: Response, next: NextFunction) {
+    try {
+      const validation = pdfCombinedSchema.safeParse(req.body);
+      if (!validation.success) {
+        throw new HTTPError('Invalid request parameters', 400);
+      }
+
+      const { language, count, tone, niche } = validation.data;
+      const buffer = await PdfController.fetchPdfBuffer(validation.data.pdfUrl);
+      const fullText = await PdfController.pdfService.extractFullText(buffer);
+
+      const [captions, script] = await Promise.all([
+        PdfController.captionService.generateCaptions(
+          fullText,
+          language,
+          count,
+          tone,
+          niche
+        ),
+        PdfController.scriptService.generateScript(
+          fullText,
+          language,
+          tone,
+          niche
+        )
+      ]);
+
+      res.json({
+        success: true,
+        captions: captions.map((content, id) => ({ id, content, type: 'text' })),
+        script
+      });
+    } catch (error) {
+      logger.error('PDF combined generation error:', error);
+      next(new HTTPError('Failed to generate combined PDF content', 500));
     }
   }
 
@@ -304,4 +314,9 @@ export class PdfController {
 
     return Buffer.from(await response.arrayBuffer());
   }
-} 
+}
+
+export const processPdf = PdfController.processPdf;
+export const generatePdfCaptions = PdfController.generatePdfCaptions;
+export const generatePdfScript = PdfController.generatePdfScript;
+export const generateCombinedPdf = PdfController.generateCombinedPdf; 

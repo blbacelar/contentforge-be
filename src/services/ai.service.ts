@@ -3,6 +3,7 @@ import { prompts, PromptType } from '../config/prompts';
 import { LANGUAGE_CODES, LANGUAGES } from '../types/language';
 import { ScriptStructure } from '../types/script';
 import { logger } from '../utils/logger';
+import type { PromptFunction } from '../types/prompts';
 
 export class AIService {
   private readonly DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
@@ -22,7 +23,10 @@ export class AIService {
     }
     try {
       const { systemPrompt, userPrompt } = this.getPrompts(type, content, language, finalCount, tone, niche);
-      logger.info(`Generating ${type} with prompt:`, { systemPrompt, userPrompt });
+      logger.info(`Generating ${type} with prompt:`, { 
+        systemPrompt: systemPrompt.substring(0, 100) + '...', 
+        userPrompt: userPrompt.substring(0, 100) + '...' 
+      });
 
       const response = await fetch(this.DEEPSEEK_API_URL, {
         method: 'POST',
@@ -50,9 +54,53 @@ export class AIService {
       const responseText = data.choices[0]?.message?.content?.trim() || '';
       logger.info('AI Response:', { responseText });
 
+      if (typeof responseText !== 'string' || responseText.length === 0) {
+        logger.error('Invalid AI response format', { response: data });
+        throw new Error('Received empty response from AI service');
+      }
+
       if (type === 'script') {
-        let cleanedJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-        return JSON.parse(cleanedJson);
+        try {
+          // Clean up the response text to handle various JSON formats
+          let cleanedJson = responseText
+            .replace(/```json\s*/g, '')
+            .replace(/```\s*/g, '')
+            .replace(/(\r\n|\n|\r)/gm, ' ')
+            .trim();
+          
+          // Try to find JSON content between curly braces
+          const jsonMatch = cleanedJson.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            cleanedJson = jsonMatch[0];
+          }
+      
+          logger.debug('Attempting to parse script JSON:', { cleanedJson });
+          const parsedScript = JSON.parse(cleanedJson);
+          
+          // Validate and normalize script structure
+          if (!parsedScript.scenes) {
+            if (parsedScript.script?.scenes) {
+              parsedScript.scenes = parsedScript.script.scenes;
+            } else {
+              logger.error('Invalid script structure:', { parsedScript });
+              throw new Error('Invalid script structure: missing scenes array');
+            }
+          }
+          
+          if (!Array.isArray(parsedScript.scenes)) {
+            logger.error('Invalid scenes format:', { scenes: parsedScript.scenes });
+            throw new Error('Invalid script structure: scenes must be an array');
+          }
+          
+          return parsedScript;
+        } catch (parseError) {
+          logger.error('Script parsing error:', { 
+            responseText,
+            error: parseError,
+            errorMessage: parseError instanceof Error ? parseError.message : String(parseError)
+          });
+          throw new Error('Failed to parse script response');
+        }
       }
 
       // Caption processing
@@ -101,23 +149,30 @@ export class AIService {
   }
 
   private getPrompts(type: PromptType, content: string, language: LANGUAGE_CODES, count: number, tone: string, niche: string) {
+    // Validate language configuration
+    const langConfig = LANGUAGES[language];
+    if (!langConfig?.systemPrompt) {
+      logger.error('Missing language configuration', { language });
+      throw new Error(`Unsupported language: ${language}`);
+    }
+
+    // Validate prompt configuration
+    const typePrompts = prompts[type];
+    if (!typePrompts?.system || !typePrompts?.user) {
+      logger.error('Invalid prompt type configuration', { type });
+      throw new Error(`Unsupported content type: ${type}`);
+    }
+
     if (type === 'captions') {
       return {
-        systemPrompt: prompts[type].system(LANGUAGES[language].systemPrompt, count, tone, niche),
-        userPrompt: prompts[type].user(content, count, tone, niche)
-      };
-    }
-    
-    if (type === 'script') {
-      return {
-        systemPrompt: prompts[type].system(LANGUAGES[language].systemPrompt, tone, niche),
-        userPrompt: prompts[type].user(content, tone, niche)
+        systemPrompt: (typePrompts.system as PromptFunction<[string, number, string, string]>)(langConfig.systemPrompt, count, tone, niche),
+        userPrompt: (typePrompts.user as PromptFunction<[string, number, string, string]>)(content, count, tone, niche)
       };
     }
 
     return {
-      systemPrompt: prompts[type].system(LANGUAGES[language].systemPrompt, tone, niche),
-      userPrompt: prompts[type].user(content, tone, niche)
+      systemPrompt: (typePrompts.system as PromptFunction<[string, string, string]>)(langConfig.systemPrompt, tone, niche),
+      userPrompt: (typePrompts.user as PromptFunction<[string, string, string]>)(content, tone, niche)
     };
   }
 

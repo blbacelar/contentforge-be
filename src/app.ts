@@ -5,7 +5,9 @@ import rateLimit from 'express-rate-limit';
 import { errorHandler } from './middleware/errorHandler';
 import { createApiRouter } from './routes/api';
 import { requestLogger } from './middleware/requestLogger';
-import { AIService } from './services/ai.service';
+import { healthRoutes } from './routes/health.routes';
+
+
 
 export function initializeApp() {
   const app = express();
@@ -35,38 +37,12 @@ export function initializeApp() {
     max: 100
   }));
 
+  // Mount health routes
+  app.use('/api/health', healthRoutes);
+
   // API routes
   app.use('/api', createApiRouter());
-
-  // Health check
-  app.get('/health', async (req, res) => {
-    const healthcheck: any = {
-      status: 'ok',
-      timestamp: new Date().toISOString(),
-      environment: process.env.NODE_ENV,
-      uptime: process.uptime(),
-      memoryUsage: process.memoryUsage(),
-      version: process.env.npm_package_version || '1.0.0',
-      services: {
-        deepseek: process.env.DEEPSEEK_API_KEY ? 'configured' : 'not configured',
-        cloudinary: process.env.CLOUDINARY_API_KEY ? 'configured' : 'not configured',
-        deepseekStatus: 'unknown'
-      }
-    };
-
-    try {
-      if (process.env.DEEPSEEK_API_KEY) {
-        const aiService = new AIService();
-        healthcheck.services.deepseekStatus = await aiService.checkAPIHealth();
-      }
-      
-      res.status(200).json(healthcheck);
-    } catch (error) {
-      healthcheck.status = 'error';
-      healthcheck.error = error instanceof Error ? error.message : 'Unknown error';
-      res.status(503).json(healthcheck);
-    }
-  });
+  
 
   // Error handling
   app.use(errorHandler);

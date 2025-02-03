@@ -6,6 +6,8 @@ import { AIService } from '../services/ai.service';
 import { ScriptStructure } from '../types/script';
 import { logger } from '../utils/logger';
 import { TONES } from '../config/tones';
+import { CaptionGenerationService } from '../services/caption-generation.service';
+import { ScriptGenerationService } from '../services/script-generation.service';
 
 export const transcriptSchema = z.object({
   url: z.string().url()
@@ -26,8 +28,16 @@ export const youtubeScriptSchema = z.object({
   niche: z.string().min(3).max(50).optional().default('general')
 });
 
+export const youtubeCombinedSchema = youtubeCaptionsSchema.merge(youtubeScriptSchema).extend({
+  url: z.string().url(),
+  language: z.enum(['en-US', 'es-ES', 'pt-BR']),
+  count: z.number().int().min(1).max(5).optional().default(1)
+});
+
 export class YoutubeController {
   private static aiService = new AIService();
+  private static captionService = new CaptionGenerationService();
+  private static scriptService = new ScriptGenerationService();
 
   static async getTranscript(req: Request, res: Response, next: NextFunction) {
     try {
@@ -141,6 +151,47 @@ export class YoutubeController {
     }
   }
 
+  static async generateCombinedYouTube(req: Request, res: Response, next: NextFunction) {
+    try {
+      logger.info('🎬 Starting YouTube combined generation');
+      const validation = youtubeCombinedSchema.safeParse(req.body);
+      if (!validation.success) {
+        logger.warn('❌ Invalid request parameters');
+        throw new HTTPError('Invalid YouTube URL or language', 400);
+      }
+
+      const { language, count, tone, niche } = validation.data;
+      const videoId = YoutubeController.extractVideoId(validation.data.url);
+      const transcriptItems = await YoutubeTranscript.fetchTranscript(videoId);
+      const transcript = transcriptItems.map(item => item.text).join(' ');
+      
+      const [captions, script] = await Promise.all([
+        YoutubeController.captionService.generateCaptions(
+          transcript,
+          language,
+          count,
+          tone,
+          niche
+        ),
+        YoutubeController.scriptService.generateScript(
+          transcript,
+          language,
+          tone,
+          niche
+        )
+      ]);
+
+      res.json({
+        success: true,
+        captions: captions.map((content, id) => ({ id, content, type: 'text' })),
+        script
+      });
+    } catch (error) {
+      logger.error('YouTube combined generation error:', error);
+      next(new HTTPError('Failed to generate combined YouTube content', 500));
+    }
+  }
+
   private static extractVideoId(url: string): string {
     logger.debug(`🔍 Extracting video ID from URL: ${url}`);
     const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
@@ -170,4 +221,5 @@ export class YoutubeController {
 
 export const getYouTubeTranscript = YoutubeController.getTranscript;
 export const generateYouTubeCaptions = YoutubeController.generateYouTubeCaptions;
-export const generateYouTubeScript = YoutubeController.generateYouTubeScript; 
+export const generateYouTubeScript = YoutubeController.generateYouTubeScript;
+export const generateCombinedYouTube = YoutubeController.generateCombinedYouTube; 
