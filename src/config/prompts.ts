@@ -140,7 +140,7 @@ Will Labour's alternative targeting criminal gangs prove more effective?
 Watch this space. What are your thoughts on this pivotal moment in migration policy? ⚖️🌊 #RwandaPolicy #AsylumSeekers #MigrationDebate #UKParliament #HumanDignity #InternationalLaw #ModernSlavery #GlobalMigration #ChannelCrossings #UKGovernment #PoliticalEditorial #EthicalPolicy #PublicAccountability #LegislativeChallenges #LawAndOrder #NationalSecurity #SafeHarbours #VoteOutcome`,
     
     user: (content: string, count: number, tone: string, niche: string) =>
-      `Content:\n${content}\nTone: ${tone}\nNiche: ${niche}\n\nGenerate ${count} captions (newline separated):`
+      `Content:\n${content}\nTone: ${tone}\nNiche: ${niche}\n\nGenerate ${count} captions numbered 1-${count}:`
   },
 
   summary: {

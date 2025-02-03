@@ -34,14 +34,17 @@ export class TextController {
         );
       }
 
+      const { text, language, count, tone, niche } = validation.data;
+
       try {
         const captions = await TextController.aiService.generateContent(
           'captions',
-          validation.data.text,
-          validation.data.language,
-          validation.data.count,
-          validation.data.tone,
-          validation.data.niche
+          text,
+          language,
+          count,
+          tone,
+          niche
+
         ) as string[];
 
         res.json({

@@ -51,41 +51,43 @@ export class AIService {
       logger.info('AI Response:', { responseText });
 
       if (type === 'script') {
-        let cleanedJson = responseText;
-        try {
-          // Remove markdown code blocks
-          cleanedJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-          return JSON.parse(cleanedJson) as ScriptStructure;
-        } catch (error) {
-          console.error('Script JSON Parse Error:', error);
-          console.error('Cleaned Response:', cleanedJson);
-          throw new HTTPError('Failed to parse script JSON', 500);
-        }
+        let cleanedJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+        return JSON.parse(cleanedJson);
       }
 
       // Caption processing
       logger.info('Processing captions from response');
+      logger.debug('Raw AI response for captions:', { responseText });
       const rawCaptions = responseText.split('\n')
-        .map((c: string) => {
-          const processed = c.replace(/^["\d.]+[\s)]*/, '')
+        .map((c: string, index: number) => {
+          const processed = c
+            .replace(/^["\d.\-)]+\s*/, '')
             .replace(/\s{2,}/g, ' ')
             .trim();
-          logger.debug('Processed caption:', { original: c, processed });
+          
+          logger.debug(`Processing caption line ${index + 1}`, {
+            original: c,
+            processed
+          });
+          
           return processed;
         })
-        .filter((c: string) => {
-          const isValid = c.length > 0 && !c.startsWith('Caption');
-          if (!isValid) {
-            logger.debug('Filtered out caption:', { caption: c });
-          }
-          return isValid;
-        });
+        .filter((c: string) => c.length >= 5);
       
       const finalCaptions = rawCaptions.slice(0, finalCount);
       logger.info(`Generated ${finalCaptions.length} captions`);
       
       if (finalCaptions.length === 0) {
         throw new Error('No valid captions were generated from the response');
+      }
+
+      if (rawCaptions.length < finalCount) {
+        logger.warn('Insufficient captions generated', {
+          expected: finalCount,
+          received: rawCaptions.length,
+          responseText
+        });
+        throw new Error(`Only generated ${rawCaptions.length}/${finalCount} captions`);
       }
 
       return finalCaptions;
