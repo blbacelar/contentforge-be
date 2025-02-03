@@ -118,4 +118,44 @@ export class AIService {
       userPrompt: prompts[type].user(content, tone, niche)
     };
   }
+
+  async checkAPIHealth(timeout = 2000): Promise<string> {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+      const response = await fetch(this.DEEPSEEK_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: 'deepseek-chat',
+          messages: [{
+            role: 'user',
+            content: 'Ping'
+          }],
+          max_tokens: 1,
+          temperature: 0
+        }),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        logger.error('Deepseek API Health Check Failed:', response.status);
+        return 'unhealthy';
+      }
+
+      return 'healthy';
+    } catch (error) {
+      logger.error('Deepseek API Health Check Error:', error instanceof Error ? error : new Error(String(error)));
+      if (error instanceof Error && error.name === 'AbortError') {
+        return 'timeout';
+      }
+      return 'unreachable';
+    }
+  }
 } 
