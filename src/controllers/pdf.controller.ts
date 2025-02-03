@@ -8,6 +8,7 @@ import { logger } from '../utils/logger';
 import { TONES } from '../config/tones';
 import { CaptionGenerationService } from '../services/caption-generation.service';
 import { ScriptGenerationService } from '../services/script-generation.service';
+import pdf from 'pdf-parse';
 
 export const pdfSchema = z.object({
   url: z.string().url(),
@@ -194,21 +195,20 @@ export class PdfController {
       const buffer = await PdfController.fetchPdfBuffer(url);
 
       logger.info('Extracting text from PDF');
-      const fullText = await PdfController.pdfService.extractFullText(buffer);
+      const { text: pdfText } = await pdf(buffer);
       
-      if (fullText.length < 100) {
-        logger.warn('PDF content too short');
-        throw new HTTPError('PDF content is too short for caption generation', 400);
+      if (!pdfText || pdfText.trim().length < 100) {
+        throw new HTTPError('PDF contains insufficient text for processing', 400);
       }
 
       logger.info('Generating captions with AI');
       const captions = await PdfController.captionService.generateCaptions(
-        fullText,
+        pdfText,
         language,
         count,
         tone,
         niche
-      ) as string[];
+      );
 
       logger.info(`Generated ${captions.length} captions`);
       res.json({
@@ -217,7 +217,7 @@ export class PdfController {
       });
     } catch (error) {
       logger.error('PDF caption generation error:', error);
-      next(new HTTPError('Failed to generate captions from PDF', 500));
+      next(error);
     }
   }
 
@@ -235,20 +235,32 @@ export class PdfController {
       const buffer = await PdfController.fetchPdfBuffer(url);
       
       logger.info('Extracting text from PDF');
-      const fullText = await PdfController.pdfService.extractFullText(buffer);
+      const { text: fullText } = await pdf(buffer);
       
-      if (fullText.length < 100) {
-        logger.warn('PDF content too short');
-        throw new HTTPError('PDF content is too short for script generation', 400);
+      if (!fullText || fullText.trim().length < 250) {
+        logger.warn('PDF content too short or invalid', {
+          textLength: fullText?.length || 0
+        });
+        throw new HTTPError('PDF content is too short or unreadable for script generation', 400);
       }
+
+      const cleanText = fullText
+        .replace(/(\r\n|\n|\r)/gm, ' ')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
 
       logger.info('Generating script with AI');
       const script = await PdfController.scriptService.generateScript(
-        fullText,
+        cleanText,
         language,
         tone,
         niche
-      ) as ScriptStructure;
+      );
+
+      if (!script?.scenes?.length) {
+        logger.error('Invalid script structure from PDF content', { script });
+        throw new HTTPError('Generated script structure is invalid', 500);
+      }
 
       res.json({
         success: true,

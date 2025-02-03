@@ -9,7 +9,7 @@
     "strict": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "types": ["node"],
+    "types": ["node", "pdf-parse"],
     "typeRoots": ["./node_modules/@types"]
   },
   "include": ["src/**/*"],
