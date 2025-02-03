@@ -34,7 +34,7 @@ export class CaptionGenerationService extends BaseAIService {
     }
   }
 
-  private processCaptions(responseText: string, count: number): string[] {
+  public processCaptions(responseText: string, count: number): string[] {
     try {
       logger.debug('Processing captions from response:', { responseText });
       

@@ -20,7 +20,7 @@ export class ScriptGenerationService extends BaseAIService {
         niche 
       });
 
-      const { systemPrompt, userPrompt } = this.getPrompts(content, language, 1, tone, niche);
+      const { systemPrompt, userPrompt } = this.getPrompts(content, language, 0, tone, niche);
       
       logger.debug('Generated prompts:', {
         systemPromptPreview: systemPrompt.substring(0, 100) + '...',
@@ -41,7 +41,7 @@ export class ScriptGenerationService extends BaseAIService {
     }
   }
 
-  private parseScript(responseText: string): ScriptStructure {
+  public parseScript(responseText: string): ScriptStructure {
     try {
       if (!responseText) {
         logger.error('Empty response received from AI');
@@ -78,52 +78,29 @@ export class ScriptGenerationService extends BaseAIService {
         matchLength: cleanedJson.length 
       });
 
-      try {
-        const parsedScript = JSON.parse(cleanedJson);
-        logger.debug('Successfully parsed JSON:', { 
-          hasScenes: !!parsedScript.scenes,
-          scenesIsArray: Array.isArray(parsedScript.scenes),
-          sceneCount: parsedScript.scenes?.length
-        });
-
-        // Validate script structure
-        if (!parsedScript.scenes || !Array.isArray(parsedScript.scenes)) {
-          logger.error('Invalid script structure:', { parsedScript });
-          throw new Error('Invalid script structure: missing or invalid scenes array');
-        }
-
-        // Log each scene structure
-        parsedScript.scenes.forEach((scene: any, index: number) => {
-          logger.debug(`Validating scene ${index + 1}:`, {
-            sceneId: scene.sceneId,
-            type: scene.type,
-            hasVisual: !!scene.visual,
-            hasNarration: !!scene.narration
-          });
-
-          if (!scene.sceneId || !scene.type || !scene.visual || !scene.narration) {
-            logger.error(`Invalid scene at index ${index}:`, { scene });
-            throw new Error(`Invalid scene structure at position ${index + 1}`);
-          }
-        });
-
-        return parsedScript;
-      } catch (parseError) {
-        logger.error('JSON Parse Error:', { 
-          error: parseError,
-          cleanedJson,
-          errorMessage: parseError instanceof Error ? parseError.message : String(parseError)
-        });
-        throw parseError;
+      // Parse and validate script structure
+      const parsedScript: ScriptStructure = JSON.parse(cleanedJson);
+      
+      if (parsedScript.scenes) {
+        // Already has scenes, no need to assign
+      } else {
+        logger.error('Invalid script structure:', { parsedScript });
+        throw new Error('Invalid script structure: missing scenes array');
       }
+
+      if (!Array.isArray(parsedScript.scenes)) {
+        logger.error('Invalid scenes format:', { scenes: parsedScript.scenes });
+        throw new Error('Invalid script structure: scenes must be an array');
+      }
+
+      return parsedScript;
     } catch (error) {
-      logger.error('Script parsing error:', { 
-        error,
+      logger.error('Script parsing error:', {
         responseText,
-        errorMessage: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined
+        error,
+        errorMessage: error instanceof Error ? error.message : String(error)
       });
-      throw error;
+      throw new Error('Failed to parse script response');
     }
   }
 

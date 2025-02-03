@@ -118,7 +118,7 @@ The base URL is where your backend is hosted (e.g., `http://localhost:3000` in d
 - **Request Body Example:**
   ```json
   {
-    "pdfUrl": "https://example.com/your.pdf",
+    "url": "https://example.com/your.pdf",
     "language": "en-US",
     "tone": "casual",
     "niche": "general"

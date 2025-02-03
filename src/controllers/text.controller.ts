@@ -5,10 +5,12 @@ import { ScriptGenerationService } from '../services/script-generation.service';
 import { ScriptStructure } from '../types/script';
 import { logger } from '../utils/logger';
 import { textCaptionsSchema, textScriptSchema, textCombinedSchema } from '../config/schemas';
+import { UnifiedGenerationService } from '../services/unified-generation.service';
 
 export class TextController {
   private static captionService = new CaptionGenerationService();
   private static scriptService = new ScriptGenerationService();
+  private static unifiedService = new UnifiedGenerationService();
 
   static async generateTextCaptions(req: Request, res: Response, next: NextFunction) {
     try {
@@ -71,57 +73,27 @@ export class TextController {
 
   static async generateCombinedText(req: Request, res: Response, next: NextFunction) {
     try {
-      logger.info('Starting combined text generation');
       const validation = textCombinedSchema.safeParse(req.body);
       if (!validation.success) {
-        logger.warn('Invalid request parameters:', validation.error);
-        throw new HTTPError('Invalid text input for combined generation', 400);
+        throw new HTTPError('Invalid combined request parameters', 400);
       }
 
       const { text, language, count, tone, niche } = validation.data;
-      logger.info('Generating combined content', { language, count, tone, niche });
       
-      try {
-        const [captions, script] = await Promise.all([
-          TextController.captionService.generateCaptions(
-            text,
-            language,
-            count,
-            tone,
-            niche
-          ),
-          TextController.scriptService.generateScript(
-            text,
-            language,
-            tone,
-            niche
-          )
-        ]);
+      const result = await TextController.unifiedService.generateBoth(
+        text,
+        language,
+        count,
+        tone,
+        niche
+      );
 
-        if (!Array.isArray(captions) || !script?.scenes) {
-          logger.error('Invalid response format:', { captions, script });
-          throw new Error('Invalid response format from generation services');
-        }
-
-        logger.info('Successfully generated combined content', {
-          captionsCount: captions.length,
-          scenesCount: script.scenes.length
-        });
-
-        res.json({
-          success: true,
-          captions: captions.map((content, id) => ({ id, content, type: 'text' })),
-          script
-        });
-      } catch (genError) {
-        logger.error('Content generation failed:', genError);
-        throw new HTTPError(
-          `Failed to generate content: ${genError instanceof Error ? genError.message : 'Unknown error'}`,
-          500
-        );
-      }
+      res.json({
+        success: true,
+        captions: result.captions.map((content, id) => ({ id, content, type: 'text' })),
+        script: result.script
+      });
     } catch (error) {
-      logger.error('Combined generation error:', error);
       next(error);
     }
   }

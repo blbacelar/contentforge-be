@@ -10,7 +10,7 @@ import { CaptionGenerationService } from '../services/caption-generation.service
 import { ScriptGenerationService } from '../services/script-generation.service';
 
 export const pdfSchema = z.object({
-  pdfUrl: z.string().url(),
+  url: z.string().url(),
   language: z.enum(['en-US', 'es-ES', 'pt-BR']).optional().default('en-US'),
   tone: z.enum(['casual', 'formal', 'humorous', 'inspirational', 'professional']).optional().default('casual'),
   niche: z.string().min(3).max(50).optional().default('general')
@@ -22,10 +22,11 @@ export const cloudinaryPdfSchema = z.object({
 });
 
 export const pdfCaptionsSchema = z.object({
-  pdfUrl: z.string().url(),
+  url: z.string().url(),
   language: z.enum(['en-US', 'es-ES', 'pt-BR']),
   count: z.number().int().min(1).max(5).optional().default(1),
   tone: z.enum(['casual', 'formal', 'humorous', 'inspirational', 'professional']).optional().default('casual'),
+
   niche: z.string().min(3).max(50).optional().default('general')
 });
 
@@ -40,18 +41,20 @@ export const cloudinaryCaptionsSchema = z.object({
 
 
 export const pdfScriptSchema = z.object({
-  pdfUrl: z.string().url(),
+  url: z.string().url(),
   language: z.enum(['en-US', 'es-ES', 'pt-BR']),
   tone: z.enum(TONES).optional().default('Casual'),
   niche: z.string().min(3).max(50).optional().default('general')
 });
 
 
+
 export const pdfCombinedSchema = z.object({
-  pdfUrl: z.string().url(),
+  url: z.string().url(),
   language: z.enum(['en-US', 'es-ES', 'pt-BR']),
   count: z.number().int().min(1).max(5).optional().default(1),
   tone: z.enum(['casual', 'formal', 'humorous', 'inspirational', 'professional']).optional().default('casual'),
+
   niche: z.string().min(3).max(50).optional().default('general')
 });
 
@@ -69,10 +72,10 @@ export class PdfController {
         logger.warn('❌ Invalid request parameters');
         throw new HTTPError('Invalid PDF URL', 400);
       }
-
-      const buffer = await PdfController.fetchPdfBuffer(validation.data.pdfUrl);
+      const buffer = await PdfController.fetchPdfBuffer(validation.data.url);
       const fullText = await PdfController.pdfService.extractFullText(buffer);
       
+
       res.json({
         success: true,
         text: fullText
@@ -107,11 +110,12 @@ export class PdfController {
         throw new HTTPError('Invalid request parameters', 400);
       }
 
-      const { pdfUrl, language, count, tone, niche } = validation.data;
+      const { url, language, count, tone, niche } = validation.data;
 
-      const buffer = await PdfController.fetchPdfBuffer(pdfUrl);
+      const buffer = await PdfController.fetchPdfBuffer(url);
       const fullText = await PdfController.pdfService.extractFullText(buffer);
       
+
 
       if (fullText.length < 100) {
         throw new HTTPError('PDF content is too short for caption generation', 400);
@@ -144,10 +148,11 @@ export class PdfController {
         throw new HTTPError('Invalid request parameters', 400);
       }
 
-      const buffer = await PdfController.fetchPdfBuffer(validation.data.pdfUrl);
+      const buffer = await PdfController.fetchPdfBuffer(validation.data.url);
       const fullText = await PdfController.pdfService.extractFullText(buffer);
       const { language, tone, niche } = validation.data;
       
+
       if (fullText.length < 250) {
         throw new HTTPError('PDF content is too short for meaningful script generation', 400);
       }
@@ -182,11 +187,12 @@ export class PdfController {
         logger.warn('Invalid request parameters');
         throw new HTTPError('Invalid request parameters', 400);
       }
-      const { language, count, tone, niche } = validation.data;
+      const { language, count, tone, niche, url } = validation.data;
+
 
       logger.info('Fetching PDF buffer');
-      const buffer = await PdfController.fetchPdfBuffer(validation.data.pdfUrl);
-      
+      const buffer = await PdfController.fetchPdfBuffer(url);
+
       logger.info('Extracting text from PDF');
       const fullText = await PdfController.pdfService.extractFullText(buffer);
       
@@ -223,10 +229,10 @@ export class PdfController {
         logger.warn('Invalid request parameters');
         throw new HTTPError('Invalid PDF URL or language', 400);
       }
-      const { language, tone, niche } = validation.data;
+      const { language, tone, niche, url } = validation.data;
 
       logger.info('Fetching PDF buffer');
-      const buffer = await PdfController.fetchPdfBuffer(validation.data.pdfUrl);
+      const buffer = await PdfController.fetchPdfBuffer(url);
       
       logger.info('Extracting text from PDF');
       const fullText = await PdfController.pdfService.extractFullText(buffer);
@@ -261,9 +267,10 @@ export class PdfController {
         throw new HTTPError('Invalid request parameters', 400);
       }
 
-      const { language, count, tone, niche } = validation.data;
-      const buffer = await PdfController.fetchPdfBuffer(validation.data.pdfUrl);
+      const { language, count, tone, niche, url } = validation.data;
+      const buffer = await PdfController.fetchPdfBuffer(url);
       const fullText = await PdfController.pdfService.extractFullText(buffer);
+
 
       const [captions, script] = await Promise.all([
         PdfController.captionService.generateCaptions(
@@ -292,18 +299,19 @@ export class PdfController {
     }
   }
 
-  private static async fetchPdfBuffer(pdfUrl: string): Promise<Buffer> {
+  private static async fetchPdfBuffer(url: string): Promise<Buffer> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000);
     
-    const response = await fetch(pdfUrl, { 
+    const response = await fetch(url, { 
       signal: controller.signal,
       headers: { 'User-Agent': 'ContentForge/1.0' }
     });
+
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      console.error(`PDF fetch failed - Status: ${response.status} URL: ${pdfUrl}`);
+      console.error(`PDF fetch failed - Status: ${response.status} URL: ${url}`);
       throw new HTTPError(`Failed to fetch PDF (Status ${response.status})`, 400);
     }
     
