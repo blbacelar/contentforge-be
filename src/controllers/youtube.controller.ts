@@ -8,6 +8,7 @@ import { logger } from '../utils/logger';
 import { TONES } from '../config/tones';
 import { CaptionGenerationService } from '../services/caption-generation.service';
 import { ScriptGenerationService } from '../services/script-generation.service';
+import { TranscriptResponse } from '../types/youtube';
 
 export const transcriptSchema = z.object({
   url: z.string().url()
@@ -55,12 +56,15 @@ export class YoutubeController {
       const transcriptItems = await YoutubeTranscript.fetchTranscript(videoId)
         .catch((error) => {
           logger.error('❌ Transcript fetch failed:', error);
+          if (error.message.includes('requires solving a captcha')) {
+            throw new HTTPError('Captcha verification required', 429);
+          }
           throw new HTTPError(`Failed to fetch transcript: ${error.message}`, 500);
-        });
+        }) as TranscriptResponse[];
       
       logger.info(`✅ Successfully fetched transcript with ${transcriptItems.length} items`);
       res.json({
-        transcript: transcriptItems.map(item => item.text).join(' ')
+        transcript: transcriptItems.map((item: TranscriptResponse) => item.text).join(' ')
       });
     } catch (error) {
       logger.error('❌ Transcript fetch error:', error);
@@ -232,14 +236,20 @@ export class YoutubeController {
           if (error.message.includes("Could not retrieve a transcript")) {
             throw new HTTPError('No transcript available for this video', 404);
           }
+          if (error.message.includes('requires solving a captcha')) {
+            throw new HTTPError(
+              'Captcha verification required. Please try again later or solve captcha manually in browser. Try accessing YouTube in browser first to solve captcha',
+              429
+            );
+          }
           throw new HTTPError(`Failed to fetch transcript: ${error.message}`, 500);
-        });
+        }) as TranscriptResponse[];
 
       logger.info(`✅ Successfully fetched ${transcriptItems.length} transcript items`);
       res.json({
         success: true,
         videoId,
-        transcript: transcriptItems.map(item => item.text).join(' '),
+        transcript: transcriptItems.map((item: TranscriptResponse) => item.text).join(' '),
         duration: transcriptItems[transcriptItems.length - 1].offset
       });
     } catch (error) {
