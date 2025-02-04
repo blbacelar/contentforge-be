@@ -99,6 +99,12 @@ export class TextController {
   }
 }
 
+export { 
+  textCaptionsSchema,
+  textScriptSchema,
+  textCombinedSchema 
+};
+
 export const generateTextCaptions = TextController.generateTextCaptions;
 export const generateTextScript = TextController.generateTextScript;
 export const generateCombinedText = TextController.generateCombinedText;
