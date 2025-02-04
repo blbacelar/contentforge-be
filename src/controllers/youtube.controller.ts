@@ -193,34 +193,87 @@ export class YoutubeController {
     }
   }
 
-  private static extractVideoId(url: string): string {
-    logger.debug(`🔍 Extracting video ID from URL: ${url}`);
-    const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
-    const match = url.match(regExp);
-    if (match?.[7]?.length === 11) {
-      logger.debug(`✅ Successfully extracted video ID: ${match[7]}`);
-      return match[7];
-    }
-    logger.warn('❌ Failed to extract video ID from URL');
-    throw new HTTPError('Invalid YouTube URL', 400);
-  }
-
   static async getYouTubeTranscript(
     req: Request,
     res: Response,
     next: NextFunction
   ) {
     try {
-      const { url } = req.body;
-      const transcript = await YoutubeTranscript.fetchTranscript(url);
-      res.json({ transcript });
+      logger.info('🎥 Starting YouTube transcript fetch');
+      const validation = transcriptSchema.safeParse(req.body);
+      if (!validation.success) {
+        logger.warn('❌ Invalid YouTube URL provided', { errors: validation.error.errors });
+        throw new HTTPError('Invalid YouTube URL format', 400);
+      }
+
+      logger.info(`🔗 Extracting video ID from URL: ${validation.data.url}`);
+      const videoId = YoutubeController.extractVideoId(validation.data.url);
+      
+      logger.info(`📹 Attempting transcript fetch for video ID: ${videoId}`);
+      const transcriptItems = await YoutubeTranscript.fetchTranscript(videoId)
+        .then(items => {
+          if (items.length === 0) {
+            logger.warn('⚠️ Empty transcript received', { videoId });
+            throw new HTTPError('No transcript available for this video', 404);
+          }
+          return items;
+        })
+        .catch((error: Error) => {
+          logger.error('❌ Transcript fetch failed', { 
+            videoId,
+            error: error.message,
+            stack: error.stack 
+          });
+          
+          // Handle specific error cases
+          if (error.message.includes("Transcript is disabled")) {
+            throw new HTTPError('Transcripts are disabled for this video', 400);
+          }
+          if (error.message.includes("Could not retrieve a transcript")) {
+            throw new HTTPError('No transcript available for this video', 404);
+          }
+          throw new HTTPError(`Failed to fetch transcript: ${error.message}`, 500);
+        });
+
+      logger.info(`✅ Successfully fetched ${transcriptItems.length} transcript items`);
+      res.json({
+        success: true,
+        videoId,
+        transcript: transcriptItems.map(item => item.text).join(' '),
+        duration: transcriptItems[transcriptItems.length - 1].offset
+      });
     } catch (error) {
-      next(new HTTPError('Failed to fetch transcript', 500));
+      logger.error('❌ Transcript endpoint error', {
+        body: req.body,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      next(error);
     }
+  }
+
+  private static extractVideoId(url: string): string {
+    logger.debug(`🔍 Extracting video ID from URL: ${url}`);
+    const patterns = [
+      /(?:v=|\/v\/|^youtu\.be\/|embed\/|shorts\/)([^&\n?#]+)/, // Improved regex pattern
+      /^([a-zA-Z0-9_-]{11})$/, // Direct video ID match
+    ];
+
+    for (const pattern of patterns) {
+      const match = url.match(pattern);
+      if (match && match[1]?.length === 11) {
+        const videoId = match[1];
+        logger.debug(`✅ Extracted video ID: ${videoId}`);
+        return videoId;
+      }
+    }
+
+    logger.warn('❌ Failed to extract video ID', { url });
+    throw new HTTPError('Invalid YouTube URL format', 400);
   }
 }
 
-export const getYouTubeTranscript = YoutubeController.getTranscript;
+export const getYouTubeTranscript = YoutubeController.getYouTubeTranscript;
 export const generateYouTubeCaptions = YoutubeController.generateYouTubeCaptions;
 export const generateYouTubeScript = YoutubeController.generateYouTubeScript;
 export const generateCombinedYouTube = YoutubeController.generateCombinedYouTube; 

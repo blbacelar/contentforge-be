@@ -10,7 +10,7 @@ import { cloudinaryCaptionsSchema } from '../controllers/pdf.controller';
 import { pdfScriptSchema } from '../controllers/pdf.controller';
 import { textCaptionsSchema } from '../controllers/text.controller';
 
-const schemas = {
+export const schemas = {
   youtube: transcriptSchema,
   youtubeCaptions: youtubeCaptionsSchema,
   pdf: pdfSchema,
